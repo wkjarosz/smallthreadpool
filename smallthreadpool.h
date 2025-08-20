@@ -143,8 +143,15 @@ public:
     ThreadPool(const ThreadPool &)            = delete; ///< non construction-copyable
     ThreadPool &operator=(const ThreadPool &) = delete; ///< non copyable
 
-    // Return the global default thread pool, which is created upon the first call, and guarded by a mutex
-    static ThreadPool *singleton();
+    /** Return the global default thread pool, which is created upon the first call, and guarded by a mutex
+
+        On first call, the thread pool is created with the specified number of threads. After the first call, the
+        num_threads parameter is not used.
+
+        If you want to change the number of threads after the first call, you need to stop the thread pool and start it
+        again with the new number of threads.
+    */
+    static ThreadPool *singleton(int num_threads = ThreadPool::k_all);
 
     /// Start a pool with a number of threads. \ref k_all means use the full hardware concurrency available.
     void start(int num_threads = k_all);
@@ -745,21 +752,23 @@ private:
     int                     m_num_to_block, m_num_to_exit;
 };
 
-/// Run a function once on each thread in thread Pool \p pool
+/// Run a function once on the calling thread and on each thread in thread pool \p pool
 inline void for_each_thread(std::function<void(void)> func, ThreadPool *pool = nullptr)
 {
     if (!pool)
         pool = ThreadPool::singleton();
 
-    uint32_t sz      = pool->size() + 1;
-    Barrier *barrier = new Barrier(sz);
-    parallel_for(blocked_range<uint32_t>(0, sz),
-                 [barrier, &func](int, int, int, int)
-                 {
-                     func();
-                     if (barrier->block())
-                         delete barrier;
-                 });
+    const int sz      = pool->size() + 1;
+    Barrier  *barrier = new Barrier(sz);
+    parallel_for(
+        blocked_range<int>(0, sz),
+        [barrier, &func](int, int, int, int)
+        {
+            func();
+            if (barrier->block())
+                delete barrier;
+        },
+        sz);
 }
 
 } // namespace stp
@@ -809,14 +818,14 @@ thread_local ThreadPool::Task *ThreadPool::m_thread_task             = nullptr;
 static std::unique_ptr<ThreadPool> s_singleton;
 static std::mutex                  s_singleton_lock;
 
-ThreadPool *ThreadPool::singleton()
+ThreadPool *ThreadPool::singleton(int num_threads)
 {
     std::unique_lock<std::mutex> guard(s_singleton_lock);
 
     if (!s_singleton)
     {
         s_singleton = std::make_unique<ThreadPool>();
-        s_singleton->start();
+        s_singleton->start(num_threads);
     }
 
     return s_singleton.get();
