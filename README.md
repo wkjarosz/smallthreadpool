@@ -28,7 +28,7 @@ int main(int, char **) {
     int result[100];
 
     // Call the provided lambda function 100 times with blocks of size 1
-    parallel_for(
+    stp::parallel_for(
         blocked_range<uint32_t>(0   // begin,
                                 100 // end,
                                 1   // block_size
