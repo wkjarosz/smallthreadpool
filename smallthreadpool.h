@@ -754,7 +754,7 @@ inline void for_each_thread(std::function<void(void)> func, ThreadPool *pool = n
     uint32_t sz      = pool->size() + 1;
     Barrier *barrier = new Barrier(sz);
     parallel_for(blocked_range<uint32_t>(0, sz),
-                 [barrier, &func](blocked_range<uint32_t> range)
+                 [barrier, &func](int, int, int, int)
                  {
                      func();
                      if (barrier->block())
